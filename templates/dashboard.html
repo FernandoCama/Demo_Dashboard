@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#075982">
+    <title>Valle Grande | Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/estilo.css') }}" rel="stylesheet">
+    
+    <!-- AÑADIDO: Carga de librería Plotly -->
+    <script src="https://cdn.plot.ly/plotly-3.3.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <a class="brand" href="{{ url_for('inicio') }}" aria-label="Inicio del dashboard">
+                <span class="brand-mark">VG</span>
+                <span><strong>Valle Grande <span>02</span></strong><small>Panel de control</small></span>
+            </a>
+
+            <div class="sidebar-label">MENÚ PRINCIPAL</div>
+            <a class="nav-link active" href="{{ url_for('inicio') }}">
+                <span class="nav-icon">▦</span> Resumen general
+            </a>
+            <a class="nav-link" href="#seccion-grafico">
+                <span class="nav-icon">◔</span> Estadísticas
+            </a>
+            <a class="nav-link" href="#seccion-tabla">
+                <span class="nav-icon">▤</span> Registros
+            </a>
+
+            <div class="sidebar-footer">
+                <span class="status-dot"></span>
+                <div><strong>Panel operativo</strong><small>Fuente: Google Sheets</small></div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">VALLE GRANDE <span aria-hidden="true">·</span> PANEL DE AUTOMATIZACIÓN</p>
+                    <h1>Resumen general</h1>
+                    <p class="page-subtitle">Toda la actividad y validación de registros, en un solo lugar.</p>
+                </div>
+                <button class="btn-refresh" type="button" onclick="window.location.reload()">
+                    <span aria-hidden="true">↻</span> Actualizar datos
+                </button>
+            </header>
+
+            {% if error_carga %}
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <strong>No se pudo actualizar la información.</strong> {{ error_carga }}
+            </div>
+            {% endif %}
+
+            <section class="summary-grid" aria-label="Indicadores principales">
+                <article class="metric-card metric-primary">
+                    <div class="metric-topline"><span class="metric-label">TOTAL DE REGISTROS</span><span class="metric-icon">▤</span></div>
+                    <div class="metric-value">{{ kpis.total_registros }}</div>
+                    <div class="metric-foot"><span class="metric-dot"></span> Registros recibidos de la fuente</div>
+                </article>
+
+                {% set estados = kpis.conteo_estados %}
+                {% for estado, cantidad in estados.items() %}
+                {% if loop.index <= 3 %}
+                <article class="metric-card">
+                    <div class="metric-topline"><span class="metric-label">{{ estado|upper }}</span><span class="status-pill">Estado</span></div>
+                    <div class="metric-value">{{ cantidad }}</div>
+                    <div class="metric-foot">{{ ((cantidad / kpis.total_registros * 100) if kpis.total_registros else 0)|round|int }}% del total de registros</div>
+                </article>
+                {% endif %}
+                {% endfor %}
+            </section>
+
+            <section class="content-grid">
+                
+                <!-- MODIFICADO: Contenedor del gráfico para mostrar Plotly -->
+                <article class="panel chart-panel" id="seccion-grafico">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">DISTRIBUCIÓN</p><h2>Estado de las solicitudes</h2><p class="panel-subtitle">Gráfico Interactivo Plotly.</p></div>
+                        <span class="panel-badge">Interactivo</span>
+                    </div>
+                    <div class="chart-area">
+                        {% if grafico_interactivo %}
+                            <!-- Aquí se inserta la magia de Plotly -->
+                            {{ grafico_interactivo | safe }}
+                        {% else %}
+                            <!-- Respaldo (Backup) en caso de que Plotly falle: tu PNG original -->
+                            <img src="{{ url_for('static', filename='grafico_estados.png', v=version_grafico) }}" alt="Gráfico de respaldo" class="status-chart">
+                        {% endif %}
+                    </div>
+                </article>
+
+                <article class="panel info-panel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">VISTA RÁPIDA</p><h2>Resumen de validación</h2><p class="panel-subtitle">Conteo por estado registrado.</p></div>
+                    </div>
+                    {% if estados %}
+                    <div class="status-list">
+                        {% for estado, cantidad in estados.items() %}
+                        {% set color_estado = colores_estados.get(estado, '#64748b') %}
+                        <div class="status-row">
+                            <div class="status-row-label"><span class="legend-dot" style="background-color: {{ color_estado }}"></span><span>{{ estado }}</span></div>
+                            <strong>{{ cantidad }}</strong>
+                        </div>
+                        {% set total_registros = kpis.total_registros|default(0, true)|float %}
+                        {% set porcentaje = ((cantidad|float / total_registros * 100) if total_registros > 0 else 0)|round(1) %}
+                        <div class="progress-track">
+                            <div class="progress-fill" data-width="{{ porcentaje }}" style="width: 0%; background-color: {{ color_estado }}"></div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="empty-state compact-empty"><span>◌</span><p>No hay estados para resumir.</p></div>
+                    {% endif %}
+                    <div class="info-footer"><span class="info-footer-icon">ⓘ</span><span>Última consulta: {{ actualizado }}</span></div>
+                </article>
+            </section>
+
+            <section class="panel records-panel" id="seccion-tabla">
+                <div class="panel-heading records-heading">
+                    <div><p class="eyebrow">DETALLE DE INFORMACIÓN</p><h2>Registros</h2><p class="panel-subtitle">Busca datos o filtra por estado sin recargar la página.</p></div>
+                    <div class="records-heading-meta">
+                        <span class="record-limit-note" title="Límite configurado actualmente en la aplicación">ⓘ Límite de referencia: S/ {{ '%.2f'|format(limite_gasto) }}</span>
+                        <span class="record-count"><strong id="filasVisibles">{{ kpis.total_registros }}</strong> registros visibles</span>
+                    </div>
+                </div>
+
+                <div class="table-tools">
+                    <label class="search-box" for="buscarRegistros"><span aria-hidden="true">⌕</span><input type="search" id="buscarRegistros" placeholder="Buscar en los registros..." autocomplete="off"></label>
+                    <label class="filter-box" for="filtroEstado"><span>Estado:</span>
+                        <select id="filtroEstado" {% if not estados %}disabled{% endif %}>
+                            <option value="">Todos los estados</option>
+                            {% for estado in estados.keys() %}<option value="{{ estado }}">{{ estado }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <button class="btn-clear" type="button" id="limpiarFiltros">Limpiar filtros</button>
+                </div>
+
+                {% if registros %}
+                <div class="table-scroll" id="envolturaTabla">
+                    <table class="dashboard-table" aria-label="Listado resumido de registros">
+                        <thead><tr>
+                            <th scope="col">Código</th>
+                            <th scope="col">Nombres y apellidos</th>
+                            <th scope="col" class="amount-heading">Monto declarado (S/)</th>
+                            <th scope="col">Control de ley</th>
+                            <th scope="col">Estado de validación</th>
+                            <th scope="col" class="actions-heading">Acciones</th>
+                        </tr></thead>
+                        <tbody id="cuerpoRegistros"></tbody>
+                    </table>
+                </div>
+                <div class="table-empty" id="sinCoincidencias" hidden>No se encontraron registros que coincidan con la búsqueda.</div>
+                {% else %}
+                <div class="empty-state"><span>▤</span><h3>No hay datos disponibles</h3><p>Comprueba la conexión a Google Sheets y actualiza el dashboard.</p></div>
+                {% endif %}
+            </section>
+
+            <footer class="page-footer"><span>Dashboard de Automatización</span><span>Datos consultados: {{ actualizado }}</span></footer>
+        </main>
+    </div>
+
+    <div class="modal fade" id="modalDetalleRegistro" tabindex="-1" aria-labelledby="tituloDetalleRegistro" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg record-modal-dialog">
+            <div class="modal-content record-modal-content" role="dialog" aria-modal="true">
+                <div class="modal-header record-modal-header">
+                    <div>
+                        <p class="eyebrow">INFORMACIÓN COMPLETA</p>
+                        <h2 class="modal-title" id="tituloDetalleRegistro">Detalle del registro</h2>
+                        <p class="modal-record-code" id="codigoDetalleRegistro"></p>
+                    </div>
+                    <button type="button" class="modal-close" data-bs-dismiss="modal" aria-label="Cerrar detalle">×</button>
+                </div>
+                <div class="modal-body" id="contenidoDetalleRegistro" tabindex="0"></div>
+                <div class="modal-footer record-modal-footer">
+                    <button type="button" class="btn-modal-close" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn-modal-reject" id="rechazarRegistro" hidden>Rechazar</button>
+                    <button type="button" class="btn-modal-approve" id="aprobarRegistro" hidden>Aprobar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    (() => {
+        const columnas = {{ columnas|tojson }};
+        let registros = {{ registros|tojson }};
+        const csrfToken = {{ csrf_token|tojson }};
+        const coloresEstados = {{ colores_estados|tojson }};
+        const normalizar = valor => String(valor ?? '').normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').replace(/\s+/g, ' ').trim();
+        const claves = columnas.map(normalizar);
+        const buscarColumna = (...terminos) => claves.findIndex(clave => terminos.every(termino => clave.includes(termino)));
+        const getValor = (registro, indice) => indice >= 0 ? registro[indice] : '';
+        const idxCodigo = buscarColumna('codigo');
+        const idxMonto = buscarColumna('monto');
+        const idxControl = buscarColumna('control', 'ley');
+        const idxFirma = claves.findIndex(clave => clave === 'firma' || clave.includes('firma'));
+        const idxNotificado = buscarColumna('notificado');
+        let idxEstado = buscarColumna('estado', 'validacion');
+        if (idxEstado < 0) idxEstado = claves.findIndex(clave => clave === 'columna 1');
+        const idxNombreCompleto = claves.findIndex(clave =>
+            clave.includes('nombre completo') || (clave.includes('nombre') && clave.includes('apellido')) || clave.includes('solicitante')
+        );
+        const indicesNombres = claves.map((clave, indice) => ({ clave, indice }))
+            .filter(({ clave }) => clave.includes('nombre') && !clave.includes('apellido'))
+            .map(({ indice }) => indice);
+        const indicesApellidos = claves.map((clave, indice) => ({ clave, indice }))
+            .filter(({ clave }) => clave.includes('apellido'))
+            .map(({ indice }) => indice);
+        const nombreRegistro = registro => {
+            if (idxNombreCompleto >= 0) return getValor(registro, idxNombreCompleto);
+            return [...indicesNombres, ...indicesApellidos]
+                .map(indice => getValor(registro, indice)).filter(Boolean).join(' ');
+        };
+        const montoFormato = valor => {
+            const normalizado = String(valor ?? '').trim().replace(/\s/g, '').replace(',', '.');
+            const numero = Number(normalizado);
+            return normalizado && Number.isFinite(numero)
+                ? `S/ ${new Intl.NumberFormat('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(numero)}`
+                : (valor === null || valor === undefined || valor === '' ? '—' : String(valor));
+        };
+        const badge = (valor, tipo) => {
+            const clave = normalizar(valor);
+            let tono = 'neutral';
+            if (tipo === 'estado') {
+                if (clave.includes('aprob') || clave.includes('approved')) tono = 'approved';
+                else if (clave.includes('pendiente') || clave.includes('pending')) tono = 'pending';
+                else if (clave.includes('descart') || clave.includes('rejected')) tono = 'rejected';
+            } else if (clave.includes('dentro')) tono = 'approved';
+            else if (clave.includes('excede') || clave.includes('supera')) tono = 'rejected';
+            const etiqueta = document.createElement('span');
+            etiqueta.className = `record-badge badge-${tono}`;
+            etiqueta.textContent = valor === null || valor === undefined || valor === '' ? 'Sin dato' : String(valor);
+            return etiqueta;
+        };
+        const tbody = document.getElementById('cuerpoRegistros');
+        const buscar = document.getElementById('buscarRegistros');
+        const filtroEstado = document.getElementById('filtroEstado');
+        const limpiar = document.getElementById('limpiarFiltros');
+        const filasVisibles = document.getElementById('filasVisibles');
+        const sinCoincidencias = document.getElementById('sinCoincidencias');
+        const modalElement = document.getElementById('modalDetalleRegistro');
+        const contenidoDetalle = document.getElementById('contenidoDetalleRegistro');
+        const botonAprobar = document.getElementById('aprobarRegistro');
+        const botonRechazar = document.getElementById('rechazarRegistro');
+        const modal = modalElement ? bootstrap.Modal.getOrCreateInstance(modalElement) : null;
+        let botonInvocador = null;
+        let registroActual = null;
+        const aprobacionesEnCurso = new Set();
+        if (modalElement) {
+            modalElement.addEventListener('hidden.bs.modal', () => {
+                if (botonInvocador) botonInvocador.focus();
+                botonInvocador = null;
+            });
+        }
+
+        function crearFila(registro) {
+            const fila = document.createElement('tr');
+            const codigo = String(getValor(registro, idxCodigo) ?? '').trim();
+            fila.dataset.recordCode = codigo;
+            const celdas = [
+                ['record-code', getValor(registro, idxCodigo)],
+                ['record-name', nombreRegistro(registro)],
+                ['record-amount', montoFormato(getValor(registro, idxMonto))],
+                ['record-control', null],
+                ['record-state', null],
+                ['record-actions', null],
+            ];
+            celdas.forEach(([clase, valor], columna) => {
+                const celda = document.createElement('td');
+                celda.className = clase;
+                if (columna === 3) celda.append(badge(getValor(registro, idxControl), 'control'));
+                else if (columna === 4) celda.append(badge(getValor(registro, idxEstado), 'estado'));
+                else if (columna === 5) {
+                    const boton = document.createElement('button');
+                    boton.type = 'button';
+                    boton.className = 'btn-view-record';
+                    boton.dataset.recordCode = codigo;
+                    boton.title = 'Ver detalle';
+                    boton.setAttribute('aria-label', `Ver detalle del registro ${codigo || 'sin código'}`);
+                    boton.setAttribute('data-bs-toggle', 'tooltip');
+                    boton.setAttribute('data-bs-placement', 'top');
+                    boton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>';
+                    celda.append(boton);
+                } else {
+                    celda.textContent = valor === null || valor === undefined || valor === '' ? '—' : String(valor);
+                }
+                fila.append(celda);
+            });
+            fila.dataset.searchText = registro
+                .filter((valor, indice) => indice !== idxFirma)
+                .map(valor => String(valor ?? '')).join(' ').toLocaleLowerCase('es');
+            fila.dataset.status = normalizar(getValor(registro, idxEstado));
+            return fila;
+        }
+        if (tbody) registros.forEach(registro => tbody.append(crearFila(registro)));
+
+        function aplicarFiltros() {
+            const consulta = buscar.value.trim().toLocaleLowerCase('es');
+            const estadoElegido = normalizar(filtroEstado.value);
+            let visibles = 0;
+            tbody.querySelectorAll('tr').forEach(fila => {
+                const mostrar = fila.dataset.searchText.includes(consulta) &&
+                    (!estadoElegido || fila.dataset.status === estadoElegido);
+                fila.hidden = !mostrar;
+                if (mostrar) visibles++;
+            });
+            filasVisibles.textContent = visibles;
+            sinCoincidencias.hidden = visibles !== 0;
+        }
+        if (buscar && filtroEstado && limpiar && tbody) {
+            buscar.addEventListener('input', aplicarFiltros);
+            filtroEstado.addEventListener('change', aplicarFiltros);
+            limpiar.addEventListener('click', () => {
+                buscar.value = '';
+                filtroEstado.value = '';
+                aplicarFiltros();
+                buscar.focus();
+            });
+            aplicarFiltros();
+        }
+
+        const grupos = [
+            { titulo: 'Datos de la persona', columnas: columnas.map((nombre, i) => ({ nombre, i })).filter(({ i }) => {
+                const clave = claves[i];
+                return i !== idxFirma && (clave.includes('nombre') || clave.includes('apellido') || clave.includes('solicitante') || clave.includes('dni') || clave.includes('correo') || clave.includes('email') || clave.includes('area') || clave.includes('carrera'));
+            }) },
+            { titulo: 'Datos del gasto', columnas: columnas.map((nombre, i) => ({ nombre, i })).filter(({ i }) => {
+                const clave = claves[i];
+                return i !== idxFirma && (clave.includes('codigo') || clave.includes('motivo') || clave.includes('monto'));
+            }) },
+            { titulo: 'Validación', columnas: columnas.map((nombre, i) => ({ nombre, i })).filter(({ i }) => {
+                const clave = claves[i];
+                return i !== idxFirma && ((clave.includes('control') && clave.includes('ley')) || (clave.includes('estado') && clave.includes('validacion')) || clave.includes('notificado'));
+            }) },
+        ];
+        const indicesAgrupados = new Set(grupos.flatMap(grupo => grupo.columnas.map(columna => columna.i)));
+        grupos.push({ titulo: 'Otros datos', columnas: columnas.map((nombre, i) => ({ nombre, i })).filter(({ i }) => i !== idxFirma && !indicesAgrupados.has(i)) });
+
+        function extraerFirma(valor) {
+            const contenido = String(valor ?? '').trim();
+            if (!contenido) return null;
+            const coincidencia = contenido.match(/^data:image\/(png|jpe?g|gif|webp);base64,([\s\S]+)$/i);
+            let base64 = coincidencia ? coincidencia[2] : contenido;
+            base64 = base64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+            if (!base64 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) return null;
+            base64 = base64.replace(/=+$/, '');
+            if (base64.length % 4 === 1) return null;
+            base64 += '='.repeat((4 - base64.length % 4) % 4);
+            try {
+                const bytes = atob(base64);
+                if (bytes.length < 12) return null;
+                const inicio = Array.from(bytes.slice(0, 12), caracter => caracter.charCodeAt(0));
+                let mime = '';
+                if (inicio.slice(0, 8).join(',') === '137,80,78,71,13,10,26,10') mime = 'image/png';
+                else if (inicio[0] === 255 && inicio[1] === 216 && inicio[2] === 255) mime = 'image/jpeg';
+                else if (bytes.startsWith('GIF87a') || bytes.startsWith('GIF89a')) mime = 'image/gif';
+                else if (bytes.slice(0, 4) === 'RIFF' && bytes.slice(8, 12) === 'WEBP') mime = 'image/webp';
+                if (!mime) return null;
+                return `data:${mime};base64,${base64}`;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        function renderFirma(valor) {
+            const seccion = document.createElement('section');
+            seccion.className = 'detail-section signature-section';
+            const titulo = document.createElement('h3');
+            titulo.textContent = 'Firma';
+            const marco = document.createElement('div');
+            marco.className = 'signature-frame';
+            const contenido = String(valor ?? '').trim();
+            const origen = extraerFirma(contenido);
+            if (!contenido) {
+                marco.textContent = 'Firma no disponible';
+            } else if (!origen) {
+                marco.textContent = 'No se pudo cargar la firma';
+            } else {
+                const imagen = document.createElement('img');
+                imagen.alt = 'Firma del registro';
+                imagen.decoding = 'async';
+                imagen.src = origen;
+                imagen.addEventListener('error', () => {
+                    marco.replaceChildren(document.createTextNode('No se pudo cargar la firma'));
+                }, { once: true });
+                marco.append(imagen);
+            }
+            seccion.append(titulo, marco);
+            contenidoDetalle.append(seccion);
+        }
+
+        function renderDetalle(registro) {
+            contenidoDetalle.replaceChildren();
+            const identidad = document.createElement('section');
+            identidad.className = 'record-identity';
+            const nombre = document.createElement('div');
+            nombre.className = 'record-identity-name';
+            const etiquetaNombre = document.createElement('span');
+            etiquetaNombre.textContent = 'Nombre';
+            const valorNombre = document.createElement('strong');
+            valorNombre.textContent = nombreRegistro(registro) || 'Sin nombre';
+            nombre.append(etiquetaNombre, valorNombre);
+            const estado = document.createElement('div');
+            estado.className = 'record-identity-status';
+            const etiquetaEstado = document.createElement('span');
+            etiquetaEstado.textContent = 'Estado actual';
+            estado.append(etiquetaEstado, badge(getValor(registro, idxEstado), 'estado'));
+            identidad.append(nombre, estado);
+            contenidoDetalle.append(identidad);
+
+            const contenedorSecciones = document.createElement('div');
+            contenedorSecciones.className = 'detail-sections';
+            grupos.forEach(grupo => {
+                if (!grupo.columnas.length) return;
+                const seccion = document.createElement('section');
+                seccion.className = 'detail-section';
+                const titulo = document.createElement('h3');
+                titulo.textContent = grupo.titulo;
+                const grid = document.createElement('dl');
+                grid.className = 'detail-grid';
+                grupo.columnas.forEach(({ nombre, i }) => {
+                    const item = document.createElement('div');
+                    item.className = 'detail-item';
+                    const etiqueta = document.createElement('dt');
+                    etiqueta.textContent = nombre;
+                    const valor = document.createElement('dd');
+                    const clave = claves[i];
+                    const dato = getValor(registro, i);
+                    if ((clave.includes('estado') && clave.includes('validacion'))) valor.append(badge(dato, 'estado'));
+                    else if (clave.includes('control') && clave.includes('ley')) valor.append(badge(dato, 'control'));
+                    else if (clave.includes('monto')) valor.textContent = montoFormato(dato);
+                    else valor.textContent = dato === null || dato === undefined || dato === '' ? '—' : String(dato);
+                    item.append(etiqueta, valor);
+                    grid.append(item);
+                });
+                seccion.append(titulo, grid);
+                contenedorSecciones.append(seccion);
+            });
+            contenidoDetalle.append(contenedorSecciones);
+            renderFirma(getValor(registro, idxFirma));
+        }
+        document.addEventListener('click', event => {
+            const boton = event.target.closest('.btn-view-record');
+            if (!boton || !modal) return;
+            const codigo = String(boton.dataset.recordCode || '').trim();
+            const registro = registros.find(fila => String(getValor(fila, idxCodigo) ?? '').trim() === codigo);
+            if (!registro) return;
+            document.getElementById('codigoDetalleRegistro').textContent = codigo ? `Código: ${codigo}` : 'Registro sin código';
+            renderDetalle(registro);
+            registroActual = registro;
+            actualizarBotonesAccion(registro);
+            botonInvocador = boton;
+            modal.show(boton);
+        });
+
+        function actualizarBotonesAccion(registro) {
+            const codigo = String(getValor(registro, idxCodigo) ?? '').trim();
+            const pendiente = normalizar(getValor(registro, idxEstado)) === 'pendiente';
+            [botonAprobar, botonRechazar].forEach(boton => {
+                if (!boton) return;
+                boton.hidden = !pendiente;
+                boton.dataset.recordCode = codigo;
+                boton.disabled = aprobacionesEnCurso.has(codigo);
+            });
+        }
+
+        function restaurarFocoDetalle(accion) {
+            if (!modalElement || !modalElement.classList.contains('show')) return;
+            const preferido = accion === 'aprobar' ? botonAprobar : botonRechazar;
+            const destino = preferido && !preferido.hidden && !preferido.disabled
+                ? preferido
+                : modalElement.querySelector('.btn-modal-close');
+            destino?.focus();
+        }
+
+        const escaparHtml = valor => String(valor ?? '').replace(/[&<>"']/g, caracter => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[caracter]);
+
+        function calcularEstados() {
+            const conteo = new Map();
+            registros.forEach(registro => {
+                const estado = String(getValor(registro, idxEstado) || 'Sin estado').trim() || 'Sin estado';
+                conteo.set(estado, (conteo.get(estado) || 0) + 1);
+            });
+            return [...conteo.entries()];
+        }
+
+        function actualizarResumen() {
+            const estadosActuales = calcularEstados();
+            if (filtroEstado) {
+                const estadoSeleccionado = filtroEstado.value;
+                filtroEstado.replaceChildren(new Option('Todos los estados', ''));
+                estadosActuales.forEach(([estado]) => filtroEstado.add(new Option(estado, estado)));
+                if (estadoSeleccionado && !estadosActuales.some(([estado]) => normalizar(estado) === normalizar(estadoSeleccionado))) {
+                    filtroEstado.add(new Option(estadoSeleccionado, estadoSeleccionado));
+                }
+                filtroEstado.value = estadoSeleccionado;
+            }
+            const tarjetas = document.querySelector('.summary-grid');
+            if (tarjetas) {
+                const principal = tarjetas.querySelector('.metric-primary');
+                if (principal) principal.querySelector('.metric-value').textContent = registros.length;
+                tarjetas.replaceChildren(...[principal].filter(Boolean));
+                estadosActuales.slice(0, 3).forEach(([estado, cantidad]) => {
+                    const tarjeta = document.createElement('article');
+                    tarjeta.className = 'metric-card';
+                    const linea = document.createElement('div');
+                    linea.className = 'metric-topline';
+                    const etiqueta = document.createElement('span');
+                    etiqueta.className = 'metric-label';
+                    etiqueta.textContent = estado.toLocaleUpperCase('es');
+                    const pill = document.createElement('span');
+                    pill.className = 'status-pill';
+                    pill.textContent = 'Estado';
+                    linea.append(etiqueta, pill);
+                    const valor = document.createElement('div');
+                    valor.className = 'metric-value';
+                    valor.textContent = cantidad;
+                    const pie = document.createElement('div');
+                    pie.className = 'metric-foot';
+                    pie.textContent = `${registros.length ? Math.round(cantidad / registros.length * 100) : 0}% del total de registros`;
+                    tarjeta.append(linea, valor, pie);
+                    tarjetas.append(tarjeta);
+                });
+            }
+
+            const lista = document.querySelector('.status-list');
+            if (lista) {
+                lista.replaceChildren();
+                estadosActuales.forEach(([estado, cantidad]) => {
+                    const color = coloresEstados[estado] || '#64748b';
+                    const fila = document.createElement('div');
+                    fila.className = 'status-row';
+                    const etiqueta = document.createElement('div');
+                    etiqueta.className = 'status-row-label';
+                    const punto = document.createElement('span');
+                    punto.className = 'legend-dot';
+                    punto.style.backgroundColor = color;
+                    const nombre = document.createElement('span');
+                    nombre.textContent = estado;
+                    const valor = document.createElement('strong');
+                    valor.textContent = cantidad;
+                    etiqueta.append(punto, nombre);
+                    fila.append(etiqueta, valor);
+                    const progreso = document.createElement('div');
+                    progreso.className = 'progress-track';
+                    const relleno = document.createElement('div');
+                    relleno.className = 'progress-fill';
+                    relleno.style.width = `${registros.length ? cantidad / registros.length * 100 : 0}%`;
+                    relleno.style.backgroundColor = color;
+                    progreso.append(relleno);
+                    lista.append(fila, progreso);
+                });
+            }
+
+            const grafico = document.querySelector('.chart-area .js-plotly-plot');
+            if (grafico && window.Plotly) {
+                const estados = estadosActuales.map(([estado]) => estado);
+                const cantidades = estadosActuales.map(([, cantidad]) => cantidad);
+                const total = cantidades.reduce((suma, valor) => suma + valor, 0);
+                const colores = estados.map(estado => coloresEstados[estado] || '#64748b');
+                const porcentajes = cantidades.map(cantidad => total ? cantidad / total * 100 : 0);
+                const etiquetas = cantidades.map((cantidad, i) => `${cantidad} (${porcentajes[i].toFixed(1)}%)`);
+                const layout = Object.assign({}, grafico.layout || {}, {
+                    height: Math.max(310, 58 * estados.length + 80),
+                    showlegend: false,
+                    xaxis: { title: 'Cantidad', range: [0, Math.max(1, ...cantidades) * 1.4], rangemode: 'tozero', showgrid: true, gridcolor: '#e8edf5', zeroline: false },
+                    yaxis: { title: 'Estado', autorange: 'reversed', automargin: true }
+                });
+                window.Plotly.react(grafico, [{
+                    x: cantidades, y: estados, orientation: 'h', type: 'bar',
+                    marker: { color: colores, line: { color: 'rgba(255,255,255,0.82)', width: 1.5 }, opacity: 0.94 },
+                    text: etiquetas, textposition: 'outside', cliponaxis: false,
+                    customdata: porcentajes.map((porcentaje, i) => [porcentaje, colores[i]]), hoverinfo: 'none'
+                }], layout, { responsive: true, displayModeBar: false });
+            }
+        }
+
+        function actualizarVistaTrasCambio(codigo, estado, notificacion) {
+            const indice = registros.findIndex(fila => String(getValor(fila, idxCodigo) ?? '').trim() === codigo);
+            if (indice < 0) return;
+            registros[indice][idxEstado] = estado;
+            if ((notificacion.registrado || notificacion.ya_estaba) && idxNotificado >= 0) {
+                registros[indice][idxNotificado] = 'SÍ';
+            }
+            tbody.replaceChildren(...registros.map(crearFila));
+            if (window.bootstrap) {
+                tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(elemento => new bootstrap.Tooltip(elemento));
+            }
+            actualizarResumen();
+            aplicarFiltros();
+            registroActual = registros[indice];
+            document.getElementById('codigoDetalleRegistro').textContent = `Código: ${codigo}`;
+            renderDetalle(registroActual);
+            actualizarBotonesAccion(registroActual);
+        }
+
+        async function solicitarCambioEstado(registro, accion) {
+            if (!window.Swal || !registro) return;
+            const codigo = String(getValor(registro, idxCodigo) ?? '').trim();
+            if (!codigo || aprobacionesEnCurso.has(codigo)) return;
+            aprobacionesEnCurso.add(codigo);
+            actualizarBotonesAccion(registro);
+            const nombre = nombreRegistro(registro) || 'Sin nombre';
+            const monto = montoFormato(getValor(registro, idxMonto));
+            const aprobar = accion === 'aprobar';
+            const verbo = aprobar ? 'aprobar' : 'rechazar';
+            const estadoEsperado = aprobar ? 'APROBADO' : 'DESCARTADO';
+            const confirmacion = await Swal.fire({
+                title: `¿Deseas ${verbo} este registro?`,
+                html: `<div class="approval-summary"><p><strong>Código:</strong> ${escaparHtml(codigo)}</p><p><strong>Nombre:</strong> ${escaparHtml(nombre)}</p><p><strong>Monto:</strong> ${escaparHtml(monto)}</p></div>`,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: `Sí, ${verbo}`,
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true,
+                focusCancel: true,
+                didClose: () => restaurarFocoDetalle(accion),
+            });
+            if (!confirmacion.isConfirmed) {
+                aprobacionesEnCurso.delete(codigo);
+                actualizarBotonesAccion(registro);
+                restaurarFocoDetalle(accion);
+                return;
+            }
+            Swal.fire({
+                title: `${aprobar ? 'Aprobando' : 'Rechazando'} registro…`,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            let errorGuardado = null;
+            let respuesta = null;
+            try {
+                const response = await fetch(`/api/registros/${accion}`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+                    body: JSON.stringify({ codigo })
+                });
+                respuesta = await response.json().catch(() => ({}));
+                if (!response.ok || respuesta.guardado !== true || respuesta.estado !== estadoEsperado) {
+                    errorGuardado = respuesta.error || 'No se pudo confirmar la escritura en Google Sheets.';
+                }
+            } catch (_) {
+                errorGuardado = 'No se pudo contactar con el servidor. No se actualizó el panel.';
+            } finally {
+                aprobacionesEnCurso.delete(codigo);
+                actualizarBotonesAccion(registro);
+            }
+
+            if (errorGuardado) {
+                const resultadoError = await Swal.fire({
+                    title: `No se pudo ${verbo}`,
+                    text: errorGuardado,
+                    icon: 'error',
+                    showCancelButton: true,
+                    confirmButtonText: 'Reintentar',
+                    cancelButtonText: 'Cerrar',
+                    reverseButtons: true,
+                    didClose: () => restaurarFocoDetalle(accion)
+                });
+                if (resultadoError.isConfirmed) await solicitarCambioEstado(registro, accion);
+                return;
+            }
+
+            actualizarVistaTrasCambio(codigo, estadoEsperado, respuesta.notificacion || {});
+            const resultadoNotificacion = respuesta.notificacion || {};
+            const detalleNotificacion = resultadoNotificacion.enviado
+                ? resultadoNotificacion.registrado
+                    ? 'Notificación: enviada y registrada en Google Sheets.'
+                    : 'Notificación: enviada, pero no se pudo registrar en Google Sheets.'
+                : resultadoNotificacion.ya_estaba
+                    ? resultadoNotificacion.mensaje
+                    : `Notificación: no enviada. ${resultadoNotificacion.mensaje || 'No se recibió confirmación del envío.'}`;
+            const notificacionConcluida = resultadoNotificacion.enviado || resultadoNotificacion.ya_estaba;
+            await Swal.fire({
+                title: notificacionConcluida
+                    ? (aprobar ? 'Registro aprobado' : 'Registro rechazado')
+                    : `Registro ${aprobar ? 'aprobado' : 'rechazado'}; notificación no enviada`,
+                html: `<p>Google Sheets confirmó el estado <strong>${estadoEsperado}</strong> para <strong>${escaparHtml(codigo)}</strong>.</p><p>${escaparHtml(detalleNotificacion)}</p>`,
+                icon: notificacionConcluida ? 'success' : 'warning',
+                confirmButtonText: 'Aceptar',
+                didClose: () => restaurarFocoDetalle(accion)
+            });
+        }
+
+        if (botonAprobar) botonAprobar.addEventListener('click', () => {
+            if (registroActual && normalizar(getValor(registroActual, idxEstado)) === 'pendiente') {
+                solicitarCambioEstado(registroActual, 'aprobar');
+            }
+        });
+        if (botonRechazar) botonRechazar.addEventListener('click', () => {
+            if (registroActual && normalizar(getValor(registroActual, idxEstado)) === 'pendiente') {
+                solicitarCambioEstado(registroActual, 'rechazar');
+            }
+        });
+
+        if (window.bootstrap) {
+            document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(elemento => new bootstrap.Tooltip(elemento));
+        }
+        setTimeout(() => {
+            document.querySelectorAll('.progress-fill').forEach(bar => {
+                bar.style.width = bar.getAttribute('data-width') + '%';
+            });
+        }, 300);
+    })();
+    </script>
+</body>
+</html>
